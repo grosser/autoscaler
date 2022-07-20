@@ -28,13 +28,13 @@ import (
 const (
 	// MaxAllocatableDifferenceRatio describes how Node.Status.Allocatable can differ between
 	// groups in the same NodeGroupSet
-	MaxAllocatableDifferenceRatio = 0.05
+	MaxAllocatableDifferenceRatio = 1 // was 0.05
 	// MaxFreeDifferenceRatio describes how free resources (allocatable - daemon and system pods)
 	// can differ between groups in the same NodeGroupSet
-	MaxFreeDifferenceRatio = 0.05
+	MaxFreeDifferenceRatio = 1 // was 0.05
 	// MaxCapacityMemoryDifferenceRatio describes how Node.Status.Capacity.Memory can differ between
 	// groups in the same NodeGroupSet
-	MaxCapacityMemoryDifferenceRatio = 0.015
+	MaxCapacityMemoryDifferenceRatio = 1 // was 0.015
 )
 
 // BasicIgnoredLabels define a set of basic labels that should be ignored when comparing the similarity
