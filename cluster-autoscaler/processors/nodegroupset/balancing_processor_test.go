@@ -17,6 +17,7 @@ limitations under the License.
 package nodegroupset
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	"testing"
 
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
@@ -119,13 +120,13 @@ func TestBalanceSingleGroup(t *testing.T) {
 	provider.AddNodeGroup("ng1", 1, 10, 1)
 
 	// just one node
-	scaleUpInfo, err := processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 1)
+	scaleUpInfo, err := processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 1, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(scaleUpInfo))
 	assert.Equal(t, 2, scaleUpInfo[0].NewSize)
 
 	// multiple nodes
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 4)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 4, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(scaleUpInfo))
 	assert.Equal(t, 5, scaleUpInfo[0].NewSize)
@@ -142,19 +143,19 @@ func TestBalanceUnderMaxSize(t *testing.T) {
 	provider.AddNodeGroup("ng4", 1, 10, 5)
 
 	// add a single node
-	scaleUpInfo, err := processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 1)
+	scaleUpInfo, err := processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 1, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(scaleUpInfo))
 	assert.Equal(t, 2, scaleUpInfo[0].NewSize)
 
 	// add multiple nodes to single group
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 2)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 2, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(scaleUpInfo))
 	assert.Equal(t, 3, scaleUpInfo[0].NewSize)
 
 	// add nodes to groups of different sizes, divisible
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 4)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 4, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(scaleUpInfo))
 	assert.Equal(t, 4, scaleUpInfo[0].NewSize)
@@ -164,7 +165,7 @@ func TestBalanceUnderMaxSize(t *testing.T) {
 
 	// add nodes to groups of different sizes, non-divisible
 	// we expect new sizes to be 4 and 5, doesn't matter which group gets how many
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 5)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 5, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(scaleUpInfo))
 	assert.Equal(t, 9, scaleUpInfo[0].NewSize+scaleUpInfo[1].NewSize)
@@ -173,7 +174,7 @@ func TestBalanceUnderMaxSize(t *testing.T) {
 	assert.True(t, scaleUpInfo[0].Group.Id() == "ng2" || scaleUpInfo[1].Group.Id() == "ng2")
 
 	// add nodes to all groups, divisible
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 10)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, provider.NodeGroups(), 10, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(scaleUpInfo))
 	for _, info := range scaleUpInfo {
@@ -213,33 +214,33 @@ func TestBalanceHittingMaxSize(t *testing.T) {
 	}
 
 	// Just one maxed out group
-	scaleUpInfo, err := processor.BalanceScaleUpBetweenGroups(context, getGroups("ng1"), 1)
+	scaleUpInfo, err := processor.BalanceScaleUpBetweenGroups(context, getGroups("ng1"), 1, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(scaleUpInfo))
 
 	// Smallest group already maxed out, add one node
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng1", "ng2"), 1)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng1", "ng2"), 1, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(scaleUpInfo))
 	assert.Equal(t, "ng2", scaleUpInfo[0].Group.Id())
 	assert.Equal(t, 2, scaleUpInfo[0].NewSize)
 
 	// Smallest group already maxed out, too many nodes (should cap to max capacity)
-	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng1", "ng2"), 5)
+	scaleUpInfo, err = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng1", "ng2"), 5, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(scaleUpInfo))
 	assert.Equal(t, "ng2", scaleUpInfo[0].Group.Id())
 	assert.Equal(t, 3, scaleUpInfo[0].NewSize)
 
 	// First group maxes out before proceeding to next one
-	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng3"), 4)
+	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng3"), 4, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.Equal(t, 2, len(scaleUpInfo))
 	scaleUpMap := toMap(scaleUpInfo)
 	assert.Equal(t, 3, scaleUpMap["ng2"].NewSize)
 	assert.Equal(t, 5, scaleUpMap["ng3"].NewSize)
 
 	// Last group maxes out before previous one
-	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng3", "ng4"), 9)
+	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng3", "ng4"), 9, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.Equal(t, 3, len(scaleUpInfo))
 	scaleUpMap = toMap(scaleUpInfo)
 	assert.Equal(t, 3, scaleUpMap["ng2"].NewSize)
@@ -247,7 +248,7 @@ func TestBalanceHittingMaxSize(t *testing.T) {
 	assert.Equal(t, 7, scaleUpMap["ng4"].NewSize)
 
 	// Use all capacity, cap to max
-	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng3", "ng4"), 900)
+	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng3", "ng4"), 900, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.Equal(t, 3, len(scaleUpInfo))
 	scaleUpMap = toMap(scaleUpInfo)
 	assert.Equal(t, 3, scaleUpMap["ng2"].NewSize)
@@ -255,7 +256,7 @@ func TestBalanceHittingMaxSize(t *testing.T) {
 	assert.Equal(t, 7, scaleUpMap["ng4"].NewSize)
 
 	// One node group exceeds max.
-	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng5"), 1)
+	scaleUpInfo, _ = processor.BalanceScaleUpBetweenGroups(context, getGroups("ng2", "ng5"), 1, map[string]*schedulerframework.NodeInfo{}, []*apiv1.Node{})
 	assert.Equal(t, 1, len(scaleUpInfo))
 	scaleUpMap = toMap(scaleUpInfo)
 	assert.Equal(t, 2, scaleUpMap["ng2"].NewSize)

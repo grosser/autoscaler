@@ -18,6 +18,7 @@ package nodegroupset
 
 import (
 	"fmt"
+	apiv1 "k8s.io/api/core/v1"
 
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/context"
@@ -35,6 +36,8 @@ type ScaleUpInfo struct {
 	NewSize int
 	// MaxSize is the maximum allowed size of the Group
 	MaxSize int
+	// CurrenCapacity is the current capacity of the Group
+	CurrenCapacity int
 }
 
 // String is used for printing ScaleUpInfo for logging, etc
@@ -47,7 +50,7 @@ type NodeGroupSetProcessor interface {
 	FindSimilarNodeGroups(context *context.AutoscalingContext, nodeGroup cloudprovider.NodeGroup,
 		nodeInfosForGroups map[string]*schedulerframework.NodeInfo) ([]cloudprovider.NodeGroup, errors.AutoscalerError)
 
-	BalanceScaleUpBetweenGroups(context *context.AutoscalingContext, groups []cloudprovider.NodeGroup, newNodes int) ([]ScaleUpInfo, errors.AutoscalerError)
+	BalanceScaleUpBetweenGroups(context *context.AutoscalingContext, groups []cloudprovider.NodeGroup, newNodes int, nodeInfos map[string]*schedulerframework.NodeInfo, nodes []*apiv1.Node) ([]ScaleUpInfo, errors.AutoscalerError)
 	CleanUp()
 }
 
