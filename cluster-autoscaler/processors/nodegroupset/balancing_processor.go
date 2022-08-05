@@ -17,7 +17,9 @@ limitations under the License.
 package nodegroupset
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	"sort"
+	"strings"
 
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/context"
@@ -76,7 +78,9 @@ func (b *BalancingNodeGroupSetProcessor) FindSimilarNodeGroups(context *context.
 // MaxSize of each group will be respected. If newNodes > total free capacity
 // of all NodeGroups it will be capped to total capacity. In particular if all
 // group already have MaxSize, empty list will be returned.
-func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *context.AutoscalingContext, groups []cloudprovider.NodeGroup, newNodes int) ([]ScaleUpInfo, errors.AutoscalerError) {
+func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(
+	context *context.AutoscalingContext, groups []cloudprovider.NodeGroup, newNodes int,
+	nodeInfos map[string]*schedulerframework.NodeInfo, nodes []*apiv1.Node) ([]ScaleUpInfo, errors.AutoscalerError) {
 	if len(groups) == 0 {
 		return []ScaleUpInfo{}, errors.NewAutoscalerError(
 			errors.InternalError, "Can't balance scale up between 0 groups")
@@ -130,8 +134,10 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 	// 4. currentIndex <= i < j -> scaleUpInfos[i].CurrentSize <= scaleUpInfos[j].CurrentSize
 	// 5. startIndex <= i < j < currentIndex -> scaleUpInfos[i].CurrentSize == scaleUpInfos[j].CurrentSize
 	// 6. startIndex <= i < currentIndex <= j -> scaleUpInfos[i].CurrentSize <= scaleUpInfos[j].CurrentSize + 1
+	averageNodegroupCapacities := b.averageNodegroupCapacity(groups, nodes)
 	sort.Slice(scaleUpInfos, func(i, j int) bool {
-		return scaleUpInfos[i].CurrentSize < scaleUpInfos[j].CurrentSize
+		return averageNodegroupCapacities[scaleUpInfos[i].Group.Id()]*scaleUpInfos[i].CurrentSize <
+			averageNodegroupCapacities[scaleUpInfos[j].Group.Id()]*scaleUpInfos[j].CurrentSize
 	})
 	startIndex := 0
 	currentIndex := 0
@@ -155,7 +161,7 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 		// Update currentIndex.
 		// If we removed a group in this loop currentIndex may be equal to startIndex-1,
 		// in which case both branches of below if will make currentIndex == startIndex.
-		if currentIndex < len(scaleUpInfos)-1 && currentInfo.NewSize > scaleUpInfos[currentIndex+1].NewSize {
+		if currentIndex < len(scaleUpInfos)-1 && averageNodegroupCapacities[currentInfo.Group.Id()]*currentInfo.NewSize > averageNodegroupCapacities[scaleUpInfos[currentIndex+1].Group.Id()]*scaleUpInfos[currentIndex+1].NewSize {
 			// Next group has exactly one less node, than current one.
 			// We will increase it in next iteration.
 			currentIndex++
@@ -177,6 +183,28 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 	}
 
 	return result, nil
+}
+
+// averageNodegroupCapacity collects the average capacity by nodegroup id,
+// so we can add new nodes to the one with the lowest capacity instead of the one with the lowest node count
+func (b *BalancingNodeGroupSetProcessor) averageNodegroupCapacity(groups []cloudprovider.NodeGroup, nodes []*apiv1.Node) map[string]int {
+	averageNodegroupCapacities := map[string]int{}
+	nodegroupCounts := map[string]int{}
+	for _, ng := range groups {
+		ngnodes, _ := ng.Nodes()
+		for _, n := range nodes {
+			nId := strings.Split(n.Spec.ProviderID, "://")[1]
+			for _, ngnode := range ngnodes {
+				if nId == ngnode.Id {
+					nodegroupCounts[ng.Id()]++
+					c, _ := n.Status.Allocatable.Cpu().AsInt64()
+					averageNodegroupCapacities[ng.Id()] += int(c)
+				}
+			}
+		}
+		averageNodegroupCapacities[ng.Id()] /= nodegroupCounts[ng.Id()]
+	}
+	return averageNodegroupCapacities
 }
 
 // CleanUp performs final clean up of processor state.
