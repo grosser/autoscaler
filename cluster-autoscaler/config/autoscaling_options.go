@@ -127,6 +127,8 @@ type AutoscalingOptions struct {
 	BalanceSimilarNodeGroups bool
 	// BalanceFilterByPods enables filtering groups with similar machines by the pods that they need to fit
 	BalanceFilterByPods bool
+	// BalanceSimilarNodeGroupsBy decides what to balance nodegroups by default is node "count", other options are "cpu" and "memory"
+	BalanceSimilarNodeGroupsBy string
 	// ConfigNamespace is the namespace cluster-autoscaler is running in and all related configmaps live in
 	ConfigNamespace string
 	// ClusterName if available
