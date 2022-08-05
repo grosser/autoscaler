@@ -19,12 +19,12 @@ package nodegroupset
 import (
 	"sort"
 
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/context"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/errors"
-	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
-
 	klog "k8s.io/klog/v2"
+	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
 // BalancingNodeGroupSetProcessor tries to keep similar node groups balanced on scale-up.
@@ -76,7 +76,8 @@ func (b *BalancingNodeGroupSetProcessor) FindSimilarNodeGroups(context *context.
 // MaxSize of each group will be respected. If newNodes > total free capacity
 // of all NodeGroups it will be capped to total capacity. In particular if all
 // group already have MaxSize, empty list will be returned.
-func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *context.AutoscalingContext, groups []cloudprovider.NodeGroup, newNodes int) ([]ScaleUpInfo, errors.AutoscalerError) {
+func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(
+	context *context.AutoscalingContext, groups []cloudprovider.NodeGroup, newNodes int, nodes []*apiv1.Node) ([]ScaleUpInfo, errors.AutoscalerError) {
 	if len(groups) == 0 {
 		return []ScaleUpInfo{}, errors.NewAutoscalerError(
 			errors.InternalError, "Can't balance scale up between 0 groups")
@@ -130,8 +131,10 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 	// 4. currentIndex <= i < j -> scaleUpInfos[i].CurrentSize <= scaleUpInfos[j].CurrentSize
 	// 5. startIndex <= i < j < currentIndex -> scaleUpInfos[i].CurrentSize == scaleUpInfos[j].CurrentSize
 	// 6. startIndex <= i < currentIndex <= j -> scaleUpInfos[i].CurrentSize <= scaleUpInfos[j].CurrentSize + 1
+	averageNodegroupCapacities := b.averageNodegroupCapacities(groups, nodes)
 	sort.Slice(scaleUpInfos, func(i, j int) bool {
-		return scaleUpInfos[i].CurrentSize < scaleUpInfos[j].CurrentSize
+		return averageNodegroupCapacities[scaleUpInfos[i].Group.Id()]*scaleUpInfos[i].CurrentSize <
+			averageNodegroupCapacities[scaleUpInfos[j].Group.Id()]*scaleUpInfos[j].CurrentSize
 	})
 	startIndex := 0
 	currentIndex := 0
@@ -155,7 +158,9 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 		// Update currentIndex.
 		// If we removed a group in this loop currentIndex may be equal to startIndex-1,
 		// in which case both branches of below if will make currentIndex == startIndex.
-		if currentIndex < len(scaleUpInfos)-1 && currentInfo.NewSize > scaleUpInfos[currentIndex+1].NewSize {
+		if currentIndex < len(scaleUpInfos)-1 &&
+			averageNodegroupCapacities[currentInfo.Group.Id()]*currentInfo.NewSize >
+				averageNodegroupCapacities[scaleUpInfos[currentIndex+1].Group.Id()]*scaleUpInfos[currentIndex+1].NewSize {
 			// Next group has exactly one less node, than current one.
 			// We will increase it in next iteration.
 			currentIndex++
@@ -177,6 +182,54 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 	}
 
 	return result, nil
+}
+
+// averageNodegroupCapacities collects the average capacity by nodegroup id,
+// so we can add new nodes to the one with the lowest capacity instead of the one with the lowest node count
+func (b *BalancingNodeGroupSetProcessor) averageNodegroupCapacities(groups []cloudprovider.NodeGroup, nodes []*apiv1.Node) map[string]int {
+	// collect info
+	averageNodegroupCapacities := map[string]int{}
+	nodegroupCounts := map[string]int{}
+	for _, ng := range groups {
+		averageNodegroupCapacities[ng.Id()] = 0
+		nodegroupCounts[ng.Id()] = 0
+		ngNodes, err := ng.Nodes()
+		if err != nil {
+			klog.V(1).Infof("Failed to get nodes from ASG %v: %v", ng.Id(), err)
+			continue
+		}
+		for _, n := range nodes {
+			nId := n.Spec.ProviderID
+			for _, ngNode := range ngNodes {
+				if nId == ngNode.Id {
+					nodegroupCounts[ng.Id()]++
+					averageNodegroupCapacities[ng.Id()] += int(n.Status.Allocatable.Cpu().MilliValue())
+				}
+			}
+		}
+	}
+
+	// calculate average and collect fallback
+	fallback := 0
+	for _, ng := range groups {
+		if nodegroupCounts[ng.Id()] == 0 {
+			klog.V(3).Infof("Failed to find nodes for ASG %v: %v", ng.Id())
+		} else {
+			averageNodegroupCapacities[ng.Id()] /= nodegroupCounts[ng.Id()]
+			fallback = averageNodegroupCapacities[ng.Id()]
+		}
+	}
+
+	// use fallback
+	for _, ng := range groups {
+		if fallback == 0 { // no nodes were found, make all of them equal
+			averageNodegroupCapacities[ng.Id()] = 1
+		} else if nodegroupCounts[ng.Id()] == 0 { // this one group had no nodes
+			averageNodegroupCapacities[ng.Id()] = fallback
+		}
+	}
+
+	return averageNodegroupCapacities
 }
 
 // CleanUp performs final clean up of processor state.
