@@ -127,6 +127,8 @@ type AutoscalingOptions struct {
 	BalanceSimilarNodeGroups bool
 	// BalanceIgnoreMissingExpansion When balancing nodegroups, sometimes expansion options are unknown, in that case proceed with scheduling pods
 	BalanceIgnoreMissingExpansion bool
+	// BalanceSimilarNodeGroupsBy decides what to balance nodegroups by default is node "count", other options are "cpu" and "memory"
+	BalanceSimilarNodeGroupsBy string
 	// ConfigNamespace is the namespace cluster-autoscaler is running in and all related configmaps live in
 	ConfigNamespace string
 	// ClusterName if available
