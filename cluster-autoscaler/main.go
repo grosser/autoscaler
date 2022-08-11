@@ -168,6 +168,7 @@ var (
 	maxInactivityTimeFlag            = flag.Duration("max-inactivity", 10*time.Minute, "Maximum time from last recorded autoscaler activity before automatic restart")
 	maxFailingTimeFlag               = flag.Duration("max-failing-time", 15*time.Minute, "Maximum time from last recorded successful autoscaler run before automatic restart")
 	balanceSimilarNodeGroupsFlag     = flag.Bool("balance-similar-node-groups", false, "Detect similar node groups and balance the number of nodes between them")
+	balanceFilterByPodsFlag          = flag.Bool("balance-filter-by-pods", true, "Enables filtering groups with similar machines by the pods that they need to fit")
 	nodeAutoprovisioningEnabled      = flag.Bool("node-autoprovisioning-enabled", false, "Should CA autoprovision node groups when needed")
 	maxAutoprovisionedNodeGroupCount = flag.Int("max-autoprovisioned-node-group-count", 15, "The maximum number of autoprovisioned groups in the cluster.")
 
@@ -251,6 +252,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 		WriteStatusConfigMap:               *writeStatusConfigMapFlag,
 		StatusConfigMapName:                *statusConfigMapName,
 		BalanceSimilarNodeGroups:           *balanceSimilarNodeGroupsFlag,
+		BalanceFilterByPods:                *balanceFilterByPodsFlag,
 		ConfigNamespace:                    *namespace,
 		ClusterName:                        *clusterName,
 		NodeAutoprovisioningEnabled:        *nodeAutoprovisioningEnabled,

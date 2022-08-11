@@ -563,7 +563,9 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 					&status.ScaleUpStatus{CreateNodeGroupResults: createNodeGroupResults, PodsTriggeredScaleUp: bestOption.Pods},
 					typedErr.AddPrefix("Failed to find matching node groups: "))
 			}
-			similarNodeGroups = filterNodeGroupsByPods(similarNodeGroups, bestOption.Pods, expansionOptions)
+			if context.BalanceFilterByPods {
+				similarNodeGroups = filterNodeGroupsByPods(similarNodeGroups, bestOption.Pods, expansionOptions)
+			}
 			for _, ng := range similarNodeGroups {
 				if clusterStateRegistry.IsNodeGroupSafeToScaleUp(ng, now) {
 					targetNodeGroups = append(targetNodeGroups, ng)

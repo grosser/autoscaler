@@ -125,6 +125,8 @@ type AutoscalingOptions struct {
 	StatusConfigMapName string
 	// BalanceSimilarNodeGroups enables logic that identifies node groups with similar machines and tries to balance node count between them.
 	BalanceSimilarNodeGroups bool
+	// BalanceFilterByPods enables filtering groups with similar machines by the pods that they need to fit
+	BalanceFilterByPods bool
 	// ConfigNamespace is the namespace cluster-autoscaler is running in and all related configmaps live in
 	ConfigNamespace string
 	// ClusterName if available
