@@ -90,6 +90,8 @@ var (
 	address                = flag.String("address", ":8085", "The address to expose prometheus metrics.")
 	kubernetes             = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
 	kubeConfigFile         = flag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information.")
+	kubeClientBurst        = flag.Int("kube-client-burst", rest.DefaultBurst, "Burst value for kubernetes client.")
+	kubeClientQPS          = flag.Float64("kube-client-qps", float64(rest.DefaultQPS), "QPS value for kubernetes client.")
 	cloudConfig            = flag.String("cloud-config", "", "The path to the cloud provider configuration file.  Empty string for no configuration file.")
 	namespace              = flag.String("namespace", "kube-system", "Namespace in which cluster-autoscaler run.")
 	scaleDownEnabled       = flag.Bool("scale-down-enabled", true, "Should CA scale down the cluster")
@@ -282,6 +284,8 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 		BalancingExtraIgnoredLabels:        *balancingIgnoreLabelsFlag,
 		BalancingLabels:                    *balancingLabelsFlag,
 		KubeConfigPath:                     *kubeConfigFile,
+		KubeClientBurst:                    *kubeClientBurst,
+		KubeClientQPS:                      *kubeClientQPS,
 		NodeDeletionDelayTimeout:           *nodeDeletionDelayTimeout,
 		AWSUseStaticInstanceList:           *awsUseStaticInstanceList,
 		ConcurrentGceRefreshes:             *concurrentGceRefreshes,
@@ -302,7 +306,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	}
 }
 
-func getKubeConfig() *rest.Config {
+func getKubeConfig(context config.AutoscalingOptions) *rest.Config {
 	if *kubeConfigFile != "" {
 		klog.V(1).Infof("Using kubeconfig file: %s", *kubeConfigFile)
 		// use the current context in kubeconfig
@@ -321,6 +325,9 @@ func getKubeConfig() *rest.Config {
 	if err != nil {
 		klog.Fatalf("Failed to build Kubernetes client configuration: %v", err)
 	}
+
+	kubeConfig.Burst = context.KubeClientBurst
+	kubeConfig.QPS = float32(context.KubeClientQPS)
 
 	return kubeConfig
 }
@@ -347,8 +354,8 @@ func registerSignalHandlers(autoscaler core.Autoscaler) {
 func buildAutoscaler(debuggingSnapshotter debuggingsnapshot.DebuggingSnapshotter) (core.Autoscaler, error) {
 	// Create basic config from flags.
 	autoscalingOptions := createAutoscalingOptions()
-	kubeClient := createKubeClient(getKubeConfig())
-	eventsKubeClient := createKubeClient(getKubeConfig())
+	kubeClient := createKubeClient(getKubeConfig(autoscalingOptions))
+	eventsKubeClient := createKubeClient(getKubeConfig(autoscalingOptions))
 
 	opts := core.AutoscalerOptions{
 		AutoscalingOptions:   autoscalingOptions,
@@ -476,7 +483,7 @@ func main() {
 			klog.Fatalf("Unable to get hostname: %v", err)
 		}
 
-		kubeClient := createKubeClient(getKubeConfig())
+		kubeClient := createKubeClient(getKubeConfig(config.AutoscalingOptions{}))
 
 		// Validate that the client is ok.
 		_, err = kubeClient.CoreV1().Nodes().List(ctx.TODO(), metav1.ListOptions{})
