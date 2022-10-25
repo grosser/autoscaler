@@ -193,8 +193,16 @@ func createAWSManagerInternal(
 
 	if awsService == nil {
 		awsSdkProvider := newAWSSDKProvider(cfg)
-		sess, err := session.NewSession(aws.NewConfig().WithRegion(getRegion()).
-			WithEndpointResolver(getResolver(awsSdkProvider.cfg)))
+		config := aws.NewConfig().
+			WithRegion(getRegion()).
+			WithEndpointResolver(getResolver(awsSdkProvider.cfg))
+
+		config, err = setMaxRetriesFromEnv(config)
+		if err != nil {
+			return nil, err
+		}
+
+		sess, err := session.NewSession(config)
 		if err != nil {
 			return nil, err
 		}
@@ -226,6 +234,21 @@ func createAWSManagerInternal(
 	}
 
 	return manager, nil
+}
+
+// setMaxRetriesFromEnv sets aws config MaxRetries by reading AWS_MAX_ATTEMPTS
+// aws sdk does not auto-set these so instead of having more config options we can reuse what the aws cli
+// does and read AWS_MAX_ATTEMPTS from the env https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+func setMaxRetriesFromEnv(config *aws.Config) (*aws.Config, error) {
+	max_retries := os.Getenv("AWS_MAX_ATTEMPTS")
+	if max_retries != "" {
+		num, err := strconv.Atoi(max_retries)
+		if err != nil {
+			return nil, err
+		}
+		config = config.WithMaxRetries(num)
+	}
+	return config, nil
 }
 
 // readAWSCloudConfig reads an instance of AWSCloudConfig from config reader.
