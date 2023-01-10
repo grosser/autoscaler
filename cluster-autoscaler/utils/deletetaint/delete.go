@@ -70,7 +70,10 @@ func addTaint(node *apiv1.Node, client kube_client.Interface, taintKey string, e
 	retryDeadline := time.Now().Add(maxRetryDeadline)
 	freshNode := node.DeepCopy()
 	var err error
-	refresh := false
+	// TODO: this used to be `false` to be efficient, but it causes errors since it overrides the whole node with
+	// what is currently in the cache here and can end up removing annotations
+	// ideally we patch the taints instead to limit the race condition
+	refresh := true
 	for {
 		if refresh {
 			// Get the newest version of the node.
@@ -89,6 +92,10 @@ func addTaint(node *apiv1.Node, client kube_client.Interface, taintKey string, e
 			}
 			return nil
 		}
+
+		// hack: add to the cached node so we stop looping
+		addTaintToSpec(node, taintKey, effect, cordonNode)
+
 		_, err = client.CoreV1().Nodes().Update(context.TODO(), freshNode, metav1.UpdateOptions{})
 		if err != nil && errors.IsConflict(err) && time.Now().Before(retryDeadline) {
 			refresh = true
