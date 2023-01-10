@@ -96,7 +96,9 @@ func addTaint(node *apiv1.Node, client kube_client.Interface, taintKey string, e
 		// hack: add to the cached node so we stop looping
 		addTaintToSpec(node, taintKey, effect, cordonNode)
 
-		_, err = client.CoreV1().Nodes().Update(context.TODO(), freshNode, metav1.UpdateOptions{})
+		unode, err := client.CoreV1().Nodes().Update(context.TODO(), freshNode, metav1.UpdateOptions{})
+		klog.Warningf("updated node %v to %v .. .cache is %v", unode.Spec.Taints[0], err, node.Spec.Taints[0])
+
 		if err != nil && errors.IsConflict(err) && time.Now().Before(retryDeadline) {
 			refresh = true
 			time.Sleep(conflictRetryInterval)
