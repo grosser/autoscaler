@@ -311,7 +311,11 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			klog.V(4).Infof(*resp.Activity.Description)
 
 			// Proactively decrement the size so autoscaler makes better decisions
-			commonAsg.curSize--
+			// this seems to cause asg to scale down when trying to scale up since the internal cache gets decremented in a loop
+			// because we never check if the instance is already in termination-wait before calling this method
+			// see https://github.com/kubernetes/autoscaler/issues/4095
+			//commonAsg.curSize--
+			klog.V(2).Info("Not decreasing cached asg desired size to prevent scaledown bug, this might make scale-up uneven")
 		}
 	}
 	return nil
