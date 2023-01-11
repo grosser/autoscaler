@@ -67,6 +67,7 @@ type asg struct {
 	minSize        int
 	maxSize        int
 	curSize        int
+	curSizeTest    int
 	lastUpdateTime time.Time
 
 	AvailabilityZones       []string
@@ -140,6 +141,7 @@ func (m *asgCache) register(asg *asg) *asg {
 		}
 
 		existing.curSize = asg.curSize
+		existing.curSizeTest = asg.curSizeTest
 
 		// Those information are mainly required to create templates when scaling
 		// from zero
@@ -256,6 +258,7 @@ func (m *asgCache) setAsgSizeNoLock(asg *asg, size int) error {
 	// Proactively set the ASG size so autoscaler makes better decisions
 	asg.lastUpdateTime = start
 	asg.curSize = size
+	asg.curSizeTest = size
 
 	return nil
 }
@@ -314,8 +317,10 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			// this seems to cause asg to scale down when trying to scale up since the internal cache gets decremented in a loop
 			// because we never check if the instance is already in termination-wait before calling this method
 			// see https://github.com/kubernetes/autoscaler/issues/4095
-			//commonAsg.curSize--
-			klog.V(2).Info("Not decreasing cached asg desired size to prevent scaledown bug, this might make scale-up uneven")
+
+			commonAsg.curSizeTest-- // decrement an unused value so we can observe it
+			klog.V(2).Info("Not decreasing cached asg desired size to prevent scale-down bug, this might make scale-up uneven: would be %d but keeping at %d", commonAsg.curSizeTest, commonAsg.curSize)
+			klog.V(2).Info("commonASG", commonAsg)
 		}
 	}
 	return nil
@@ -510,6 +515,7 @@ func (m *asgCache) buildAsgFromAWS(g *autoscaling.Group) (*asg, error) {
 		maxSize: spec.MaxSize,
 
 		curSize:                 int(aws.Int64Value(g.DesiredCapacity)),
+		curSizeTest:             int(aws.Int64Value(g.DesiredCapacity)),
 		AvailabilityZones:       aws.StringValueSlice(g.AvailabilityZones),
 		LaunchConfigurationName: aws.StringValue(g.LaunchConfigurationName),
 		Tags:                    g.Tags,
