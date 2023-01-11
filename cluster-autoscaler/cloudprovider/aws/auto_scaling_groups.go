@@ -319,8 +319,7 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			// see https://github.com/kubernetes/autoscaler/issues/4095
 
 			commonAsg.curSizeTest-- // decrement an unused value so we can observe it
-			klog.V(2).Info("Not decreasing cached asg desired size to prevent scale-down bug, this might make scale-up uneven: would be %d but keeping at %d", commonAsg.curSizeTest, commonAsg.curSize)
-			klog.V(2).Info("commonASG", commonAsg)
+			klog.V(2).Infof("Not decreasing cached asg desired size to prevent scale-down bug, this might make scale-up uneven: would be %d but keeping at %d", commonAsg.curSizeTest, commonAsg.curSize)
 		}
 	}
 	return nil
