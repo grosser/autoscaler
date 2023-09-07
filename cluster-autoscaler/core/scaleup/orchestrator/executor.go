@@ -33,6 +33,7 @@ import (
 	"k8s.io/autoscaler/cluster-autoscaler/processors/nodegroupset"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/errors"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/gpu"
+	"strings"
 )
 
 // ScaleUpExecutor scales up node groups.
@@ -168,7 +169,8 @@ func (e *scaleUpExecutor) executeScaleUp(
 	if err := e.increaseSize(info.Group, increase, atomic); err != nil {
 		e.autoscalingCtx.LogRecorder.Eventf(apiv1.EventTypeWarning, "FailedToScaleUpGroup", "Scale-up failed for group %s: %v", info.Group.Id(), err)
 		aerr := errors.ToAutoscalerError(errors.CloudProviderError, err).AddPrefix("failed to increase node group size: ")
-		e.scaleStateNotifier.RegisterFailedScaleUp(info.Group, string(aerr.Type()), aerr.Error(), gpuResourceName, gpuType, now)
+		backoff := (strings.Contains(aerr.Error(), "Throttling: Rate exceeded"))
+		e.scaleStateNotifier.RegisterFailedScaleUp(info.Group, string(aerr.Type()), aerr.Error(), gpuResourceName, gpuType, now, backoff)
 		return aerr
 	}
 	if increase < 0 {

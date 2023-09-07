@@ -36,7 +36,7 @@ type NodeGroupChangeObserver interface {
 	// RegisterFailedScaleUp records failed scale-up for a nodegroup.
 	// reason denotes optional reason for failed scale-up
 	// errMsg denotes the actual error message
-	RegisterFailedScaleUp(nodeGroup cloudprovider.NodeGroup, reason string, errMsg string, gpuResourceName, gpuType string, currentTime time.Time)
+	RegisterFailedScaleUp(nodeGroup cloudprovider.NodeGroup, reason string, errMsg string, gpuResourceName, gpuType string, currentTime time.Time, backoff bool)
 	// RegisterFailedScaleDown records failed scale-down for a nodegroup.
 	RegisterFailedScaleDown(nodeGroup cloudprovider.NodeGroup, reason string, currentTime time.Time)
 }
